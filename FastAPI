@@ -1,0 +1,122 @@
+1. Set Up Your Project
+a. Create Project Directory
+
+mkdir document-summary-app
+cd document-summary-app
+python -m venv venv
+source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+b. Install Dependencies
+
+pip install fastapi uvicorn transformers python-multipart
+pip install pymupdf python-docx
+
+c. Create the FastAPI Application
+
+from fastapi import FastAPI, File, UploadFile
+from typing import Union
+from transformers import pipeline
+import fitz  # PyMuPDF for PDF
+import docx
+import os
+
+app = FastAPI()
+
+# Load the summarization model
+summarizer = pipeline("summarization")
+
+def read_text_from_pdf(file_path: str) -> str:
+    text = ""
+    pdf_document = fitz.open(file_path)
+    for page in pdf_document:
+        text += page.get_text()
+    pdf_document.close()
+    return text
+
+def read_text_from_docx(file_path: str) -> str:
+    text = ""
+    doc = docx.Document(file_path)
+    for para in doc.paragraphs:
+        text += para.text + "\n"
+    return text
+
+def read_text_from_txt(file_path: str) -> str:
+    with open(file_path, 'r') as file:
+        return file.read()
+
+@app.post("/upload/")
+async def upload(file: UploadFile = File(...)) -> dict:
+    file_location = f"temp/{file.filename}"
+    with open(file_location, "wb") as buffer:
+        buffer.write(await file.read())
+    return {"file_path": file_location}
+
+@app.post("/summarize/")
+async def summarize(file_path: str):
+    if file_path.endswith('.pdf'):
+        text = read_text_from_pdf(file_path)
+    elif file_path.endswith('.docx'):
+        text = read_text_from_docx(file_path)
+    elif file_path.endswith('.txt'):
+        text = read_text_from_txt(file_path)
+    else:
+        return {"error": "Unsupported file type."}
+    
+    summary = summarizer(text, max_length=150, min_length=30, do_sample=False)
+    os.remove(file_path)  # Clean up the file
+    return {"summary": summary[0]['summary_text']}
+
+if __name__ == "__main__":
+    import uvicorn
+    if not os.path.exists("temp"):
+        os.makedirs("temp")
+    uvicorn.run(app, host="0.0.0.0", port=8000)
+
+2. Create Supporting Files
+a. Create 'requirements.txt'
+
+pip freeze > requirements.txt
+
+b. Create a 'README.md'
+
+# Document Summarization Backend
+
+This FastAPI backend service handles document uploads and summarizes them using a locally deployed LLM.
+
+## Requirements
+
+- Python 3.x
+- Dependencies listed in `requirements.txt`
+
+## Running the Server
+
+1. Create a virtual environment and activate it:
+   ```bash
+   python -m venv venv
+   source venv/bin/activate  # On Windows: venv\Scripts\activate
+
+
+
+2 Install dependencies:
+
+pip install -r requirements.txt
+
+3 Run the server:
+
+uvicorn main:app --reload
+
+The server will be available at 'http://localhost:8000'.
+
+
+
+Endpoints
+
+
+### 3. Running and Testing Your Application
+
+1. **Start the FastAPI server:**
+
+   ```bash
+   uvicorn main:app --reload
+
+
